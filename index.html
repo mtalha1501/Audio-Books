@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Audio / Video Library</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+ body { font-family: system-ui, Arial, sans-serif; margin:0; padding:0; background:#0f1115; color:#f5f7fa; }
+ header{ padding:1rem 1.25rem; background:#161a21; position:sticky; top:0; z-index:10; display:flex; gap:1rem; flex-wrap:wrap; align-items:center; }
+ h1{ font-size:1.25rem; margin:0; }
+ form{ display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+ input[type=url]{ padding:.55rem .7rem; border:1px solid #333; background:#1e242d; color:#fff; border-radius:6px; min-width:320px; }
+ button{ cursor:pointer; padding:.6rem 1rem; border-radius:6px; border:1px solid #3d6cff; background:#2463ff; color:#fff; font-weight:600; }
+ button.secondary{ background:#2a313c; border-color:#414d5c; }
+ button:hover{ filter:brightness(1.1); }
+ main{ padding:1rem clamp(.75rem,2vw,1.5rem); }
+ #videoList{ display:grid; gap:1.25rem; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); margin-top:1rem; }
+ .thumb{ background:#191f27; border:1px solid #2a313c; padding:.75rem; border-radius:10px; position:relative; display:flex; flex-direction:column; gap:.5rem; }
+ .thumb button{ all:unset; cursor:pointer; border-radius:6px; background:#2463ff; padding:.4rem .6rem; text-align:center; font-size:.8rem; }
+ .thumb button:hover{ background:#1d56e5; }
+ .thumb h3{ margin:.25rem 0 .25rem; font-size:.9rem; font-weight:600; line-height:1.2; }
+ #playerWrapper{ margin-top:1.5rem; background:#000; border:1px solid #222; border-radius:12px; padding:1rem; }
+ iframe{ max-width:100%; width:100%; height:clamp(220px, 56.25vw, 75vh); border:0; border-radius:10px; background:#000; }
+ /* enhanced card visuals */
+ .thumb{ background:#191f27; border:1px solid #2a313c; padding:.75rem; border-radius:12px; position:relative; display:flex; flex-direction:column; gap:.6rem; box-shadow:0 8px 18px rgba(0,0,0,.25); transition:transform .15s ease, box-shadow .15s ease; }
+ .thumb:hover{ transform:translateY(-2px); box-shadow:0 12px 24px rgba(0,0,0,.32); }
+ .thumb-figure{ position:relative; width:100%; aspect-ratio:16/9; border-radius:10px; overflow:hidden; background:linear-gradient(135deg,#0f1520,#0b0f18); border:1px solid #2a313c; cursor:pointer; display:grid; place-items:center; }
+ .thumb-figure img{ width:100%; height:100%; max-width:100%; max-height:100%; object-fit:contain; display:block; transition:transform .2s ease; }
+ .thumb:hover .thumb-figure img{ transform:scale(1.03); }
+ .play-badge{ position:absolute; right:8px; bottom:8px; background:rgba(36,99,255,.92); color:#fff; font-weight:800; border-radius:999px; width:34px; height:34px; display:flex; align-items:center; justify-content:center; font-size:.9rem; box-shadow:0 6px 14px rgba(0,0,0,.35); }
+ .thumb .actions{ display:flex; gap:.5rem; }
+ /* bigger, clearer titles on larger cards */
+ .thumb h3{ margin:.35rem 0 0; font-size:1rem; font-weight:650; line-height:1.3; color:#e9eef7; }
+ #emptyNote{ opacity:.6; font-size:.9rem; }
+ .listHeader{ display:flex; justify-content:space-between; align-items:center; margin-top:1.25rem; }
+ .badge{ background:#243041; padding:.25rem .55rem; border-radius:999px; font-size:.65rem; letter-spacing:.5px; text-transform:uppercase; }
+ footer{ margin:3rem 0 2rem; text-align:center; font-size:.7rem; opacity:.55; }
+ .error{ color:#ff6b6b; font-size:.8rem; margin-top:.25rem; }
+ @media (max-width:650px){ input[type=url]{ min-width:unset; flex:1 1 100%; } header{ justify-content:space-between; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Drive Video Loader</h1>
+  <form id="driveForm">
+    <textarea id="driveInput" placeholder="Paste a single Drive FOLDER link (with API key) OR many file links (one per line)." required style="padding:.55rem .7rem;border:1px solid #333;background:#1e242d;color:#fff;border-radius:6px;min-width:300px;min-height:110px;font-family:monospace;resize:vertical;"></textarea>
+    <div style="display:flex;flex-direction:column;gap:.45rem;min-width:260px;max-width:260px;">
+      <select id="bookSelect" style="padding:.55rem .7rem;border:1px solid #333;background:#1e242d;color:#fff;border-radius:6px;">
+        <option value="">Select a book…</option>
+      </select>
+      <input id="apiKeyInput" type="text" placeholder="Google API Key (for folder)" style="padding:.55rem .7rem;border:1px solid #333;background:#1e242d;color:#fff;border-radius:6px;" />
+      <input id="fileInput" type="file" accept=".txt" style="color:#fff;font-size:.65rem;" />
+  <small style="opacity:.6;line-height:1.2;">1) For folder listing add API key. 2) Optional: import a links.txt with one link per line.</small>
+    </div>
+    <button type="submit">Load</button>
+    <button type="button" id="clearBtn" class="secondary">Clear</button>
+  </form>
+</header>
+<main>
+  <section id="playerWrapper" hidden>
+     <h2 id="currentTitle" style="font-size:1rem;margin:0 0 .75rem"></h2>
+       <div style="position:relative;">
+         <iframe id="player" allow="autoplay" src="" title="Video player"></iframe>
+       </div>
+       <div id="navControls" style="display:none; margin-top:.75rem; display:flex; gap:.5rem; justify-content:flex-end;">
+         <button id="prevBtn" class="secondary" type="button">Previous</button>
+         <button id="nextBtn" type="button">Next</button>
+       </div>
+  </section>
+  <div class="listHeader">
+    <h2 style="font-size:1rem;margin:0">Videos</h2>
+    <span class="badge" id="countBadge">0</span>
+  </div>
+  <div id="videoList"></div>
+  <div id="downloadBar" style="display:none; margin:.75rem 0 0;">
+    <button id="downloadBtn" type="button">Download Links</button>
+  </div>
+  <p id="emptyNote">Paste ONE folder link + API key to auto-list, OR multiple file links (/file/d/.. or /preview). You can also import a links.txt file.</p>
+  <div id="loading" style="display:none;font-size:.75rem;opacity:.8;margin-top:.5rem;">Loading videos from Drive folder...</div>
+  <div id="errorBox" class="error"></div>
+  <section style="margin-top:2rem;">
+    <h3 style="margin:.25rem 0 .5rem;font-size:.9rem">Tips</h3>
+    <ul style="margin:.25rem 0 0 1.1rem; padding:0; font-size:.75rem; line-height:1.35;">
+      <li>Folder link format: https://drive.google.com/drive/folders/{FOLDER_ID}</li>
+      <li>File link format: https://drive.google.com/file/d/{FILE_ID}/view or /preview</li>
+      <li>You can paste multiple file links separated by spaces or new lines.</li>
+      <li>Click a thumbnail button to load video inline.</li>
+    </ul>
+  </section>
+</main>
+<footer>&copy; <span id="year"></span> Drive Video Loader</footer>
+<script>
+const form = document.getElementById('driveForm');
+const input = document.getElementById('driveInput');
+const listEl = document.getElementById('videoList');
+const player = document.getElementById('player');
+const playerWrapper = document.getElementById('playerWrapper');
+const currentTitle = document.getElementById('currentTitle');
+const countBadge = document.getElementById('countBadge');
+const errorBox = document.getElementById('errorBox');
+const emptyNote = document.getElementById('emptyNote');
+const fileInput = document.getElementById('fileInput');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const loadingEl = document.getElementById('loading');
+const downloadBar = document.getElementById('downloadBar');
+const downloadBtn = document.getElementById('downloadBtn');
+const navControls = document.getElementById('navControls');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const bookSelect = document.getElementById('bookSelect');
+let currentIndex = -1;
+let currentItems = [];
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files && fileInput.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+     const existing = input.value.trim();
+     const add = (ev.target.result || '').toString().trim();
+     input.value = existing ? existing + '\n' + add : add;
+  };
+  reader.readAsText(file);
+});
+// Simple local persistence of raw textarea content & API key
+try { input.value = localStorage.getItem('drive_links_buffer') || ''; } catch(_){}
+input.addEventListener('input', () => {
+  try { localStorage.setItem('drive_links_buffer', input.value); } catch(_){}
+});
+try { apiKeyInput.value = localStorage.getItem('drive_api_key') || ''; } catch(_){}
+apiKeyInput.addEventListener('input', ()=>{ try { if(apiKeyInput.value.trim()) localStorage.setItem('drive_api_key', apiKeyInput.value.trim()); else localStorage.removeItem('drive_api_key'); } catch(_){} });
+
+document.getElementById('clearBtn').onclick = () => { listEl.innerHTML=''; countBadge.textContent='0'; playerWrapper.hidden=true; errorBox.textContent=''; emptyNote.hidden=false; input.value=''; localStorage.removeItem('drive_links_buffer'); player.src=''; loadingEl.style.display='none'; }; 
+
+document.getElementById('year').textContent = new Date().getFullYear();
+
+// Predefined book folders (extracted from top-level HTML files)
+const BOOKS = [
+  { name: '7 Habits of Highly Effective People', url: 'https://drive.google.com/drive/folders/15PqosczljfiXumvY-Bnx-0qTGyJcTuys' },
+  { name: 'Atomic Habits', url: 'https://drive.google.com/drive/folders/1ftaHV_u6ngIuU8K4wgEwFno_msJWEJAO' },
+  { name: 'Eat That Frog', url: 'https://drive.google.com/drive/folders/1aBTKOStJV2iu5HbzGgAZG3ayHCN03oQ7' },
+  { name: 'Rich Dad Poor Dad', url: 'https://drive.google.com/drive/folders/1VQf1oRyNo0YOSbPrYVSIX9YO0SFuYbHe' },
+  { name: 'The Richest Man in Babylon', url: 'https://drive.google.com/drive/folders/1626hdCQOfmJ-GSAaq-mCTjSDXu3XhXV-' },
+];
+
+// Populate select and wire up to textarea
+if (bookSelect) {
+  for (const b of BOOKS) {
+    const opt = document.createElement('option');
+    opt.value = b.url; opt.textContent = b.name; bookSelect.appendChild(opt);
+  }
+  bookSelect.addEventListener('change', ()=>{
+    if(!bookSelect.value) return;
+    input.value = bookSelect.value;
+    try { localStorage.setItem('drive_links_buffer', input.value); } catch(_){ }
+  });
+}
+
+// Basic parsing: extract file IDs from input (manual mode) or detect single folder.
+function extractFileIds(raw){
+  const text = raw.trim();
+  if(!text) return [];
+  const parts = text.split(/\s+/);
+  const ids = [];
+  const fileRegex = /https?:\/\/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]{5,})/;
+  const altRegex = /https?:\/\/drive\.google\.com\/uc\?id=([a-zA-Z0-9_-]{5,})/;
+  // Accept plain /open?id=FILE_ID format too
+  const openRegex = /https?:\/\/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]{5,})/;
+  for(const p of parts){
+  let m = p.match(fileRegex) || p.match(altRegex) || p.match(openRegex);
+  if(m){ ids.push({ id:m[1], src:`https://drive.google.com/file/d/${m[1]}/preview`, thumb:`https://drive.google.com/thumbnail?id=${m[1]}&sz=w320` }); continue; }
+  }
+  return ids;
+}
+
+function detectSingleFolder(raw){
+  const folderRegex = /https?:\/\/drive\.google\.com\/drive\/folders\/([a-zA-Z0-9_-]{5,})/g;
+  const matches = [...raw.matchAll(folderRegex)].map(m=>m[1]);
+  if(matches.length === 1) return matches[0];
+  return null;
+}
+
+async function fetchFolderVideos(apiKey, folderId){
+  if(!apiKey) throw new Error('API key required');
+  const base = 'https://www.googleapis.com/drive/v3/files';
+  const query = encodeURIComponent(`'${folderId}' in parents and trashed=false and (mimeType contains 'video/')`);
+  const videos = [];
+  let pageToken='';
+  loadingEl.style.display='block';
+  try {
+    while(true){
+  const url = `${base}?q=${query}&fields=nextPageToken,files(id,name,mimeType,thumbnailLink)&pageSize=100${pageToken?`&pageToken=${pageToken}`:''}&key=${encodeURIComponent(apiKey)}`;
+      const res = await fetch(url);
+      if(!res.ok){ const txt = await res.text(); throw new Error(`Drive API ${res.status}: ${txt.substring(0,160)}`); }
+      const data = await res.json();
+      for(const f of (data.files||[])){
+        const thumb = f.thumbnailLink || `https://drive.google.com/thumbnail?id=${f.id}&sz=w320`;
+        videos.push({ id:f.id, name:f.name, src:`https://drive.google.com/file/d/${f.id}/preview`, thumb });
+      }
+      if(!data.nextPageToken) break; else pageToken = data.nextPageToken;
+    }
+  } finally { loadingEl.style.display='none'; }
+  return sortVideosByNumber(videos);
+}
+
+// Extract first standalone number from a string (e.g., "Video 12 - Intro" -> 12)
+function extractLeadingNumber(name){
+  if(!name) return null;
+  const m = name.match(/(?<!\d)(\d{1,6})(?!\d)/); // first isolated digit group
+  if(m) return parseInt(m[1],10);
+  return null;
+}
+
+function sortVideosByNumber(list){
+  return list.slice().sort((a,b)=>{
+    const na = extractLeadingNumber(a.name);
+    const nb = extractLeadingNumber(b.name);
+    if(na != null && nb != null && na !== nb) return na - nb; // numeric order
+    if(na != null && nb == null) return -1; // numbered first
+    if(na == null && nb != null) return 1;
+    // Fallback alphabetical (case-insensitive)
+    const an = (a.name||'').toLowerCase();
+    const bn = (b.name||'').toLowerCase();
+    if(an < bn) return -1; if(an > bn) return 1;
+    return (a.id||'').localeCompare(b.id||'');
+  });
+}
+
+function renderList(items){
+  listEl.innerHTML='';
+  let index=1;
+  currentItems = items.slice();
+  currentIndex = -1;
+  for(const item of items){
+  // Only file entries now (folders expanded via API if chosen)
+     const num = index++;
+     const div = document.createElement('div');
+     div.className='thumb';
+  const displayName = (item.name ? item.name : `Video ${num}`).replace(/</g,'&lt;');
+  const title = displayName; // retain original name only
+  const id = item.id || (item.src && (item.src.match(/file\/d\/([a-zA-Z0-9_-]+)/)||[])[1]);
+  const thumb = item.thumb || (id ? `https://drive.google.com/thumbnail?id=${id}&sz=w320` : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="%23131a24"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23cbd5e1" font-family="Arial" font-size="16">No Preview</text></svg>');
+  div.innerHTML = `
+    <figure class="thumb-figure" data-src="${item.src}" data-title="${title}">
+      <img src="${thumb}" alt="${title}" onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'320\' height=\'180\'><rect width=\'100%\' height=\'100%\' fill=\'%23131a24\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23cbd5e1\' font-family=\'Arial\' font-size=\'16\'>No Preview</text></svg>'"/>
+      <div class="play-badge">▶</div>
+    </figure>
+    <h3>${title}</h3>
+    <div class="actions"><button data-src="${item.src}" data-title="${title}">Play</button></div>`;
+     listEl.appendChild(div);
+  }
+  countBadge.textContent = items.length;
+  emptyNote.hidden = items.length>0;
+  if(!items.length){ playerWrapper.hidden=true; }
+  navControls.style.display = 'none';
+  if(downloadBar) downloadBar.style.display = items.length>0 ? 'block' : 'none';
+}
+
+function playByIndex(idx){
+  if(idx < 0 || idx >= currentItems.length) return;
+  const item = currentItems[idx];
+  currentIndex = idx;
+  player.src = item.src;
+  playerWrapper.hidden=false;
+  currentTitle.textContent = item.name || `Video ${idx+1}`;
+  player.scrollIntoView({behavior:'smooth', block:'start'});
+  navControls.style.display = 'flex';
+  prevBtn.disabled = (idx === 0);
+  nextBtn.disabled = (idx === currentItems.length - 1);
+}
+
+listEl.addEventListener('click', e=>{
+  const target = e.target.closest('[data-src]');
+  if(!target) return;
+  const src = target.getAttribute('data-src');
+  const title = target.getAttribute('data-title');
+  // find index in currentItems
+  const idx = currentItems.findIndex(it => it.src === src);
+  if(idx >= 0){
+    playByIndex(idx);
+  } else {
+    // fallback if not found
+    player.src = src; playerWrapper.hidden=false; currentTitle.textContent = title; 
+    player.scrollIntoView({behavior:'smooth', block:'start'});
+    navControls.style.display = 'flex';
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+  }
+});
+
+prevBtn.addEventListener('click', ()=>{
+  if(currentIndex > 0) playByIndex(currentIndex - 1);
+});
+nextBtn.addEventListener('click', ()=>{
+  if(currentIndex >= 0 && currentIndex < currentItems.length - 1) playByIndex(currentIndex + 1);
+});
+
+// Download all current video links as links.txt
+downloadBtn && downloadBtn.addEventListener('click', ()=>{
+  if(!currentItems || !currentItems.length) return;
+  const lines = currentItems.map(it => it.src || '').filter(Boolean);
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'links.txt';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+});
+
+form.addEventListener('submit', async e=>{
+  e.preventDefault();
+  errorBox.textContent='';
+  playerWrapper.hidden=true; player.src='';
+  const raw = input.value.trim();
+  if(!raw){ errorBox.textContent='Input required.'; return; }
+  const folderId = detectSingleFolder(raw);
+  if(folderId){
+     const apiKey = apiKeyInput.value.trim();
+     if(!apiKey){ errorBox.textContent='API key required to list folder videos.'; return; }
+     try {
+    const vids = await fetchFolderVideos(apiKey, folderId); // already sorted
+       if(!vids.length){ errorBox.textContent='No video files found (check sharing).'; renderList([]); return; }
+       renderList(vids);
+     } catch(err){ errorBox.textContent = err.message || 'Folder listing failed.'; renderList([]); }
+     return;
+  }
+  const items = extractFileIds(raw);
+  if(!items.length){ errorBox.textContent='No valid Drive file links detected.'; return; }
+  // For manual links we might not have names; still attempt numeric sort using placeholder order
+  renderList(sortVideosByNumber(items.map(o=>({ ...o, name:o.name }))));
+});
+</script>
+</body>
+</html>
